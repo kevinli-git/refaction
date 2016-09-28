@@ -3,9 +3,11 @@ using System.ComponentModel.DataAnnotations;
 
 namespace refactor_me.Models
 {
-    public class Product
+    public class ProductOption
     {
         public Guid Id { get; set; }
+
+        public Guid ProductId { get; set; }
 
         [Required]
         [MaxLength(100)]
@@ -13,9 +15,5 @@ namespace refactor_me.Models
 
         [MaxLength(500)]
         public string Description { get; set; }
-
-        public decimal Price { get; set; }
-
-        public decimal DeliveryPrice { get; set; }
     }
 }

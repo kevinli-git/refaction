@@ -1,115 +1,150 @@
-﻿using System;
+﻿using refactor_me.Models;
+using refactor_me.Repository;
+using System;
+using System.Data.Entity;
+using System.Data.Entity.Infrastructure;
+using System.Linq;
 using System.Net;
 using System.Web.Http;
-using refactor_me.Models;
+using System.Web.Http.Description;
 
 namespace refactor_me.Controllers
 {
     [RoutePrefix("products")]
-    public class ProductsController : ApiController
+    public class ProductsController : BaseController
     {
+        public ProductsController() : base()
+        { }
+        public ProductsController(IProductDbContext db) : base(db)
+        { }
+        // GET: /products
         [Route]
         [HttpGet]
-        public Products GetAll()
+        public IHttpActionResult GetProducts()
         {
-            return new Products();
+            return Ok(new
+            {
+                Items = db.Products.ToList()
+            });
         }
 
+        // GET: /products?name={name}
         [Route]
         [HttpGet]
-        public Products SearchByName(string name)
+        public IHttpActionResult SearchByName(string name)
         {
-            return new Products(name);
+            var products = db.Products.Where(p => p.Name.Contains(name)).ToList();
+
+            return Ok(new
+            {
+                Items = products
+            });
         }
 
-        [Route("{id}")]
+        // GET: /products/{id}
+        [Route("{id:guid}", Name = "GetProductById")]
         [HttpGet]
-        public Product GetProduct(Guid id)
+        [ResponseType(typeof(Product))]
+        public IHttpActionResult GetProduct(Guid id)
         {
-            var product = new Product(id);
-            if (product.IsNew)
-                throw new HttpResponseException(HttpStatusCode.NotFound);
+            var product = db.Products.Find(id);
+            if (product == null)
+            {
+                return NotFound();
+            }
 
-            return product;
+            return Ok(product);
         }
 
+        // POST: /products
         [Route]
         [HttpPost]
-        public void Create(Product product)
+        [ResponseType(typeof(Product))]
+        public IHttpActionResult Create(Product product)
         {
-            product.Save();
-        }
-
-        [Route("{id}")]
-        [HttpPut]
-        public void Update(Guid id, Product product)
-        {
-            var orig = new Product(id)
+            if (!ModelState.IsValid)
             {
-                Name = product.Name,
-                Description = product.Description,
-                Price = product.Price,
-                DeliveryPrice = product.DeliveryPrice
-            };
+                return BadRequest(ModelState);
+            }
 
-            if (!orig.IsNew)
-                orig.Save();
-        }
+            db.Products.Add(product);
 
-        [Route("{id}")]
-        [HttpDelete]
-        public void Delete(Guid id)
-        {
-            var product = new Product(id);
-            product.Delete();
-        }
-
-        [Route("{productId}/options")]
-        [HttpGet]
-        public ProductOptions GetOptions(Guid productId)
-        {
-            return new ProductOptions(productId);
-        }
-
-        [Route("{productId}/options/{id}")]
-        [HttpGet]
-        public ProductOption GetOption(Guid productId, Guid id)
-        {
-            var option = new ProductOption(id);
-            if (option.IsNew)
-                throw new HttpResponseException(HttpStatusCode.NotFound);
-
-            return option;
-        }
-
-        [Route("{productId}/options")]
-        [HttpPost]
-        public void CreateOption(Guid productId, ProductOption option)
-        {
-            option.ProductId = productId;
-            option.Save();
-        }
-
-        [Route("{productId}/options/{id}")]
-        [HttpPut]
-        public void UpdateOption(Guid id, ProductOption option)
-        {
-            var orig = new ProductOption(id)
+            try
             {
-                Name = option.Name,
-                Description = option.Description
-            };
+                db.SaveChanges();
+            }
+            catch (DbUpdateException)
+            {
+                if (db.ProductExists(product.Id))
+                {
+                    return Conflict();
+                }
+                else
+                {
+                    throw;
+                }
+            }
 
-            if (!orig.IsNew)
-                orig.Save();
+            return CreatedAtRoute("GetProductById", new { id = product.Id }, product);
         }
 
-        [Route("{productId}/options/{id}")]
-        [HttpDelete]
-        public void DeleteOption(Guid id)
+        // PUT: /products/{id}
+        [Route("{id:guid}")]
+        [HttpPut]
+        [ResponseType(typeof(Product))]
+        public IHttpActionResult Update(Guid id, Product product)
         {
-            var opt = new ProductOption(id);
-            opt.Delete();
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ModelState);
+            }
+
+            if (id != product.Id)
+            {
+                return BadRequest();
+            }
+
+            db.SetEntityModified(product);
+
+            try
+            {
+                db.SaveChanges();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                if (!db.ProductExists(id))
+                {
+                    return NotFound();
+                }
+                else
+                {
+                    throw;
+                }
+            }
+
+            //return StatusCode(HttpStatusCode.Accepted);
+            return Content(HttpStatusCode.Accepted, product);
+        }
+
+        // DELETE: /products/{id}
+        [Route("{id:guid}")]
+        [HttpDelete]
+        [ResponseType(typeof(void))]
+        public IHttpActionResult Delete(Guid id)
+        {
+            var product = db.Products.Find(id);
+            if (product == null)
+            {
+                return NotFound();
+            }
+
+            //avoid orphan options
+            db.ProductOptions.RemoveRange(db.ProductOptions.Where(p => p.ProductId == id).ToList());
+
+            db.Products.Remove(product);
+            db.SaveChanges();
+
+            return Ok();
         }
     }
 }
